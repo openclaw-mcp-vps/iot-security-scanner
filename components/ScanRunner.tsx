@@ -1,135 +1,178 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScanProgress } from "@/components/ScanProgress";
-import { DeviceCard } from "@/components/DeviceCard";
-import { VulnerabilityAlert } from "@/components/VulnerabilityAlert";
-import type { DeviceRecord, VulnerabilityRecord } from "@/lib/types";
+import { useMemo, useState } from "react";
+import { ScanSearch } from "lucide-react";
 
-interface ScanResponse {
-  scanId: string;
-  devices: DeviceRecord[];
-  vulnerabilities: VulnerabilityRecord[];
-  recommendations: string[];
+import { DeviceCard } from "@/components/DeviceCard";
+import { ScanProgress } from "@/components/ScanProgress";
+import { VulnerabilityAlert } from "@/components/VulnerabilityAlert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import type { ScanRecord } from "@/lib/types";
+
+function flattenVulnerabilities(scan: ScanRecord) {
+  return scan.devices.flatMap((device) =>
+    device.vulnerabilities.map((vulnerability) => ({
+      ...vulnerability,
+      deviceModel: device.model,
+      deviceIp: device.ip
+    }))
+  );
 }
 
 export function ScanRunner() {
-  const [networkRange, setNetworkRange] = useState("192.168.1.0/24");
-  const [stage, setStage] = useState("Ready to run a full network scan");
+  const [target, setTarget] = useState("192.168.1.0/24");
+  const [status, setStatus] = useState("Ready to start network scan");
   const [progress, setProgress] = useState(0);
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState("");
-  const [result, setResult] = useState<ScanResponse | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<ScanRecord | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const vulnerabilityByDevice = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const vulnerability of result?.vulnerabilities ?? []) {
-      map[vulnerability.device_id] = (map[vulnerability.device_id] ?? 0) + 1;
-    }
-    return map;
-  }, [result]);
+  const vulnerabilities = useMemo(
+    () => (scanResult ? flattenVulnerabilities(scanResult) : []),
+    [scanResult]
+  );
 
-  async function runScan(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setResult(null);
-    setRunning(true);
-    setStage("Discovering active hosts");
-    setProgress(15);
+  async function startScan() {
+    setError(null);
+    setIsScanning(true);
+    setScanResult(null);
+    setStatus("Discovering active hosts on your subnet...");
+    setProgress(12);
 
-    const progressTimer = setInterval(() => {
-      setProgress((current) => {
-        if (current > 88) return current;
-        return current + Math.random() * 8;
-      });
-    }, 400);
+    const progressTimer = window.setInterval(() => {
+      setProgress((previous) => (previous < 90 ? previous + 7 : previous));
+    }, 450);
 
     try {
-      const response = await fetch("/api/scans", {
+      const response = await fetch("/api/scan", {
         method: "POST",
         headers: {
-          "content-type": "application/json",
+          "Content-Type": "application/json"
         },
-        body: JSON.stringify({ networkRange }),
+        body: JSON.stringify({ target })
       });
 
       if (!response.ok) {
-        const payload = (await response.json()) as { error?: string };
-        throw new Error(payload.error || "Scan failed");
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(payload?.error || "Scan failed");
       }
 
-      setStage("Correlating known vulnerabilities");
-      const payload = (await response.json()) as ScanResponse;
-      setResult(payload);
+      setStatus("Correlating device models with vulnerability intelligence...");
+      const payload = (await response.json()) as { scan: ScanRecord };
+      setScanResult(payload.scan);
       setProgress(100);
-      setStage("Scan completed");
+      setStatus("Scan complete");
     } catch (scanError) {
-      setError(scanError instanceof Error ? scanError.message : "Unexpected scan error");
-      setStage("Scan failed");
+      const message =
+        scanError instanceof Error
+          ? scanError.message
+          : "Unable to run scan on this host";
+      setError(message);
+      setStatus("Scan failed");
+      setProgress(0);
     } finally {
-      clearInterval(progressTimer);
-      setRunning(false);
+      window.clearInterval(progressTimer);
+      setIsScanning(false);
     }
   }
 
   return (
-    <div className="space-y-8">
-      <form onSubmit={runScan} className="space-y-4 rounded-xl border border-slate-700 bg-slate-900/50 p-5">
-        <div className="space-y-2">
-          <h2 className="text-xl font-semibold text-slate-100">Start Network Scan</h2>
+    <div className="space-y-6">
+      <Card className="border-slate-800 bg-slate-950/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-slate-100">
+            <ScanSearch className="h-5 w-5 text-cyan-300" />
+            Network scan control
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
           <p className="text-sm text-slate-400">
-            Enter your local subnet. For most homes this is <span className="font-mono">192.168.1.0/24</span>.
+            Run a local scan range in CIDR format to discover IoT devices and check their exposure profile.
           </p>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Input value={networkRange} onChange={(event) => setNetworkRange(event.target.value)} required />
-          <Button type="submit" disabled={running}>
-            {running ? "Scanning..." : "Run Scan"}
-          </Button>
-        </div>
-        <ScanProgress progress={progress} stage={stage} />
-        {error ? <p className="text-sm text-red-300">{error}</p> : null}
-      </form>
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <Input
+              value={target}
+              onChange={(event) => setTarget(event.target.value)}
+              placeholder="192.168.1.0/24"
+              disabled={isScanning}
+            />
+            <Button onClick={startScan} disabled={isScanning}>
+              {isScanning ? "Scanning..." : "Start scan"}
+            </Button>
+          </div>
+          {(isScanning || progress > 0) && <ScanProgress progress={progress} status={status} />}
+          {error ? (
+            <p className="rounded-md border border-rose-800 bg-rose-950/30 p-3 text-sm text-rose-200">
+              {error}
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
 
-      {result ? (
-        <section className="space-y-6">
-          <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-5">
-            <h3 className="text-lg font-semibold text-slate-100">Priority Actions</h3>
-            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-300">
-              {result.recommendations.map((recommendation) => (
-                <li key={recommendation}>{recommendation}</li>
-              ))}
-            </ul>
+      {scanResult ? (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Card className="border-slate-800 bg-slate-950/50">
+              <CardContent className="p-4">
+                <p className="text-sm text-slate-400">Devices found</p>
+                <p className="mt-1 text-2xl font-bold text-slate-100">{scanResult.summary.totalDevices}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-800 bg-slate-950/50">
+              <CardContent className="p-4">
+                <p className="text-sm text-slate-400">Vulnerable devices</p>
+                <p className="mt-1 text-2xl font-bold text-amber-300">{scanResult.summary.vulnerableDevices}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-800 bg-slate-950/50">
+              <CardContent className="p-4">
+                <p className="text-sm text-slate-400">Critical findings</p>
+                <p className="mt-1 text-2xl font-bold text-rose-300">{scanResult.summary.criticalFindings}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-slate-800 bg-slate-950/50">
+              <CardContent className="p-4">
+                <p className="text-sm text-slate-400">Risk score</p>
+                <p className="mt-1 text-2xl font-bold text-cyan-300">{scanResult.summary.overallRiskScore}</p>
+              </CardContent>
+            </Card>
           </div>
 
-          {result.vulnerabilities.length > 0 ? (
+          <div>
+            <h2 className="mb-3 font-[var(--font-heading)] text-2xl font-semibold text-slate-100">Detected devices</h2>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {scanResult.devices.map((device) => (
+                <DeviceCard key={device.id} device={device} />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h2 className="mb-3 font-[var(--font-heading)] text-2xl font-semibold text-slate-100">Priority vulnerability alerts</h2>
             <div className="space-y-3">
-              <h3 className="text-lg font-semibold text-slate-100">Detected Vulnerabilities</h3>
-              {result.vulnerabilities.map((vulnerability) => (
-                <VulnerabilityAlert key={vulnerability.id} vulnerability={vulnerability} />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-xl border border-green-700/50 bg-green-950/20 p-4 text-sm text-green-200">
-              No known vulnerabilities matched this scan. Keep continuous monitoring enabled to catch newly disclosed threats.
-            </div>
-          )}
-
-          <div className="space-y-3">
-            <h3 className="text-lg font-semibold text-slate-100">Discovered Devices</h3>
-            <div className="grid gap-4 lg:grid-cols-2">
-              {result.devices.map((device) => (
-                <DeviceCard
-                  key={device.id}
-                  device={device}
-                  vulnerabilityCount={vulnerabilityByDevice[device.id] ?? 0}
-                />
-              ))}
+              {vulnerabilities.length > 0 ? (
+                vulnerabilities
+                  .slice(0, 8)
+                  .map((vulnerability) => (
+                    <VulnerabilityAlert
+                      key={`${vulnerability.id}-${vulnerability.deviceIp}`}
+                      vulnerability={vulnerability}
+                    />
+                  ))
+              ) : (
+                <Card className="border-slate-800 bg-slate-950/50">
+                  <CardContent className="p-4 text-sm text-slate-300">
+                    No high-confidence vulnerability matches were found for the detected devices.
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
-        </section>
+        </>
       ) : null}
     </div>
   );

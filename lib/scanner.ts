@@ -1,114 +1,165 @@
-import { randomInt } from "node:crypto";
-import type { ScannerDevice, ScannerResult } from "@/lib/types";
+import { execFile } from "node:child_process";
+import path from "node:path";
+import { promisify } from "node:util";
 
-const COMMON_NETWORK_SERVICES = [
-  { port: 80, name: "http" },
-  { port: 443, name: "https" },
-  { port: 22, name: "ssh" },
-  { port: 23, name: "telnet" },
-  { port: 53, name: "dns" },
-  { port: 554, name: "rtsp" },
-  { port: 8080, name: "http-alt" },
-  { port: 1883, name: "mqtt" },
-];
+import { z } from "zod";
 
-function scoreDevice(openPorts: number[]) {
-  let score = 20;
-  if (openPorts.includes(23)) score += 30;
-  if (openPorts.includes(22)) score += 15;
-  if (openPorts.includes(1883)) score += 10;
-  if (openPorts.length > 5) score += 10;
-  return Math.min(100, score);
-}
+import { saveScanRecord } from "@/lib/database";
+import { getSeverityWeight, lookupVulnerabilitiesForDevice } from "@/lib/vulnerability-db";
+import type { DeviceRecord, ScanRecord, ScanSummary, Severity } from "@/lib/types";
 
-function createMockDevices(networkRange: string): ScannerDevice[] {
-  const sampleModels = [
-    { vendor: "TP-Link", model: "Archer AX21", ports: [80, 443, 22] },
-    { vendor: "Dahua", model: "IPC-HFW4431", ports: [80, 554, 23] },
-    { vendor: "Philips", model: "Hue Bridge v2", ports: [80, 443] },
-    { vendor: "Ubiquiti", model: "UniFi AP AC Lite", ports: [22, 8080] },
-  ];
+const execFileAsync = promisify(execFile);
 
-  return sampleModels.slice(0, randomInt(2, sampleModels.length + 1)).map((entry, index) => ({
-    ipAddress: `192.168.1.${20 + index}`,
-    macAddress: `B8:27:EB:${randomInt(16, 255).toString(16).padStart(2, "0")}:${randomInt(16, 255)
-      .toString(16)
-      .padStart(2, "0")}:${randomInt(16, 255).toString(16).padStart(2, "0")}`.toUpperCase(),
-    hostname: `${entry.model.toLowerCase().replace(/\s+/g, "-")}.local`,
-    vendor: entry.vendor,
-    model: entry.model,
-    firmwareVersion: "Unknown",
-    openPorts: entry.ports,
-  }));
-}
+const discoveredDeviceSchema = z.object({
+  ip: z.string(),
+  mac: z.string().optional().default("unknown"),
+  hostname: z.string().optional().default("unknown"),
+  vendor: z.string().optional().default("unknown"),
+  model: z.string().optional().default("unknown"),
+  type: z
+    .enum(["router", "camera", "hub", "speaker", "assistant", "appliance", "unknown"])
+    .optional()
+    .default("unknown"),
+  os: z.string().optional().default("unknown"),
+  openPorts: z.array(z.number()).optional().default([]),
+  scanSource: z.enum(["nmap", "arp", "sample"]).optional().default("sample")
+});
 
-async function runWithNodeNmap(networkRange: string): Promise<ScannerDevice[]> {
-  const nmapModule = await import("node-nmap");
-  const NmapScan = (nmapModule as unknown as { NmapScan: new (range: string, args: string) => any }).NmapScan;
+const cliOutputSchema = z.object({
+  target: z.string(),
+  source: z.enum(["nmap", "arp", "sample"]),
+  scannedAt: z.string(),
+  devices: z.array(discoveredDeviceSchema)
+});
 
-  return new Promise((resolve, reject) => {
-    const scan = new NmapScan(networkRange, "-sV --open");
+function severityTotals(devices: DeviceRecord[]) {
+  const totals: Record<Severity, number> = {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0
+  };
 
-    scan.on("complete", (hosts: any[]) => {
-      const mapped: ScannerDevice[] = hosts.map((host) => {
-        const ports = Array.isArray(host.openPorts)
-          ? host.openPorts.map((entry: { port: number }) => entry.port).filter(Boolean)
-          : [];
-        return {
-          ipAddress: host.ip || host.ipv4 || "unknown",
-          macAddress: host.mac || null,
-          hostname: host.hostname?.[0]?.name || host.hostname || null,
-          vendor: host.vendor || null,
-          model: host.osNmap || null,
-          firmwareVersion: null,
-          openPorts: ports,
-        };
-      });
-      resolve(mapped);
-    });
-
-    scan.on("error", (error: Error) => {
-      reject(error);
-    });
-
-    scan.startScan();
-  });
-}
-
-export async function runNetworkScan(networkRange: string): Promise<ScannerResult> {
-  const forceMock = process.env.SCANNER_MODE === "mock" || process.env.NODE_ENV === "test";
-
-  let devices: ScannerDevice[];
-
-  if (forceMock) {
-    devices = createMockDevices(networkRange);
-  } else {
-    try {
-      devices = await runWithNodeNmap(networkRange);
-    } catch {
-      devices = createMockDevices(networkRange);
+  for (const device of devices) {
+    for (const vulnerability of device.vulnerabilities) {
+      totals[vulnerability.severity] += 1;
     }
   }
 
-  const normalizedDevices = devices.map((device) => ({
-    ...device,
-    openPorts: [...new Set(device.openPorts)].sort((a, b) => a - b),
-  }));
+  return totals;
+}
+
+function scoreDevice(device: DeviceRecord) {
+  const vulnerabilityScore = device.vulnerabilities
+    .map((entry) => getSeverityWeight(entry.severity))
+    .reduce((total, score) => total + score, 0);
+
+  const exposedPortScore = [23, 1900, 7547]
+    .filter((port) => device.openPorts.includes(port))
+    .length;
+
+  return Math.min(100, vulnerabilityScore + exposedPortScore * 7);
+}
+
+function recommendationSet(device: DeviceRecord) {
+  const recommendations = new Set<string>([
+    "Enable automatic firmware updates and review vendor security advisories monthly.",
+    "Move IoT devices to a dedicated guest or VLAN segment to isolate them from work laptops."
+  ]);
+
+  for (const vulnerability of device.vulnerabilities) {
+    recommendations.add(vulnerability.action);
+  }
+
+  return [...recommendations];
+}
+
+async function executeScannerCli(target?: string) {
+  const scannerPath = path.join(process.cwd(), "scanner-cli", "index.js");
+  const args = [scannerPath];
+
+  if (target && target.trim()) {
+    args.push("--target", target.trim());
+  }
+
+  const { stdout } = await execFileAsync(process.execPath, args, {
+    timeout: 45_000,
+    maxBuffer: 5 * 1024 * 1024
+  });
+
+  const parsed = cliOutputSchema.safeParse(JSON.parse(stdout));
+
+  if (!parsed.success) {
+    throw new Error("Scanner output did not match expected schema");
+  }
+
+  return parsed.data;
+}
+
+function buildSummary(devices: DeviceRecord[]): ScanSummary {
+  const severity = severityTotals(devices);
+  const vulnerableDevices = devices.filter((device) => device.vulnerabilities.length > 0).length;
+  const avgRisk =
+    devices.length > 0
+      ? Math.round(devices.reduce((sum, device) => sum + device.riskScore, 0) / devices.length)
+      : 0;
 
   return {
-    networkRange,
-    scannedAt: new Date().toISOString(),
-    devices: normalizedDevices,
+    totalDevices: devices.length,
+    vulnerableDevices,
+    criticalFindings: severity.critical,
+    highFindings: severity.high,
+    mediumFindings: severity.medium,
+    lowFindings: severity.low,
+    overallRiskScore: avgRisk
   };
 }
 
-export function computeRiskScore(device: ScannerDevice): number {
-  return scoreDevice(device.openPorts);
-}
+export async function runNetworkScan(target?: string): Promise<ScanRecord> {
+  const startedAt = new Date().toISOString();
+  const output = await executeScannerCli(target);
 
-export function summarizePorts(device: ScannerDevice): string[] {
-  return device.openPorts.map((port) => {
-    const known = COMMON_NETWORK_SERVICES.find((service) => service.port === port);
-    return known ? `${port}/${known.name}` : `${port}/unknown`;
+  const enrichedDevices: DeviceRecord[] = await Promise.all(
+    output.devices.map(async (device, index) => {
+      const base: DeviceRecord = {
+        id: `${device.ip}-${device.mac}-${index}`,
+        ip: device.ip,
+        mac: device.mac,
+        hostname: device.hostname,
+        vendor: device.vendor,
+        model: device.model,
+        type: device.type,
+        os: device.os,
+        openPorts: [...new Set(device.openPorts)].sort((a, b) => a - b),
+        scanSource: device.scanSource,
+        lastSeen: output.scannedAt,
+        riskScore: 0,
+        vulnerabilities: [],
+        recommendations: []
+      };
+
+      const vulnerabilities = await lookupVulnerabilitiesForDevice(base);
+      const withVulnerabilities: DeviceRecord = {
+        ...base,
+        vulnerabilities
+      };
+
+      return {
+        ...withVulnerabilities,
+        riskScore: scoreDevice(withVulnerabilities),
+        recommendations: recommendationSet(withVulnerabilities)
+      };
+    })
+  );
+
+  const summary = buildSummary(enrichedDevices);
+
+  return saveScanRecord({
+    startedAt,
+    completedAt: new Date().toISOString(),
+    target: output.target,
+    source: output.source,
+    summary,
+    devices: enrichedDevices
   });
 }

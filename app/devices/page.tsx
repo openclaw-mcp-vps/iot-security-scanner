@@ -1,50 +1,73 @@
-import { TopNav } from "@/components/TopNav";
+import Link from "next/link";
+
+import { AppHeader } from "@/components/AppHeader";
 import { DeviceCard } from "@/components/DeviceCard";
 import { VulnerabilityAlert } from "@/components/VulnerabilityAlert";
-import { listDevices, getDeviceVulnerabilityCounts, listVulnerabilities } from "@/lib/database";
-import { requirePaidAccess } from "@/lib/paywall";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getLatestDevices } from "@/lib/database";
 
 export default async function DevicesPage() {
-  await requirePaidAccess();
+  const devices = await getLatestDevices();
+  const sortedDevices = devices.slice().sort((a, b) => b.riskScore - a.riskScore);
 
-  const [devices, vulnerabilityCounts, vulnerabilities] = await Promise.all([
-    listDevices(),
-    getDeviceVulnerabilityCounts(),
-    listVulnerabilities(),
-  ]);
+  const topVulnerabilities = sortedDevices
+    .flatMap((device) => device.vulnerabilities)
+    .sort((a, b) => {
+      const severityRank = {
+        critical: 4,
+        high: 3,
+        medium: 2,
+        low: 1
+      };
+      return severityRank[b.severity] - severityRank[a.severity];
+    })
+    .slice(0, 10);
 
   return (
-    <>
-      <TopNav showAppLinks showLogout />
-      <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
-        <header>
-          <h1 className="text-3xl font-semibold text-slate-100">Device Inventory</h1>
-          <p className="mt-2 text-sm text-slate-400">
-            Complete device roster with risk scoring and matched vulnerability advisories.
-          </p>
-        </header>
-
-        {devices.length === 0 ? (
-          <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-6 text-sm text-slate-400">
-            No devices recorded yet. Run a scan from the Scan page to populate this inventory.
+    <div className="min-h-screen">
+      <AppHeader />
+      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="font-[var(--font-heading)] text-3xl font-semibold text-slate-100">Device inventory</h1>
+            <p className="mt-1 text-slate-400">Prioritize hardening based on each device's current risk score.</p>
           </div>
+          <Button asChild>
+            <Link href="/scan">Run new scan</Link>
+          </Button>
+        </div>
+
+        {sortedDevices.length === 0 ? (
+          <Card className="border-slate-800 bg-slate-950/50">
+            <CardContent className="p-8 text-center text-slate-300">
+              No devices found yet. Run your first scan to build an inventory.
+            </CardContent>
+          </Card>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
-            {devices.map((device) => (
-              <DeviceCard key={device.id} device={device} vulnerabilityCount={vulnerabilityCounts[device.id] ?? 0} />
-            ))}
-          </div>
+          <>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {sortedDevices.map((device) => (
+                <DeviceCard key={device.id} device={device} />
+              ))}
+            </div>
+            <Card className="mt-8 border-slate-800 bg-slate-950/50">
+              <CardHeader>
+                <CardTitle className="text-slate-100">Highest-impact findings across all devices</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {topVulnerabilities.length > 0 ? (
+                  topVulnerabilities.map((vulnerability, index) => (
+                    <VulnerabilityAlert key={`${vulnerability.id}-${index}`} vulnerability={vulnerability} />
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-300">No vulnerability matches detected in the latest scan.</p>
+                )}
+              </CardContent>
+            </Card>
+          </>
         )}
-
-        <section className="space-y-3">
-          <h2 className="text-2xl font-semibold text-slate-100">Latest Vulnerability Intelligence</h2>
-          {vulnerabilities.length === 0 ? (
-            <p className="text-sm text-slate-400">No vulnerability alerts yet. This section updates automatically after each scan.</p>
-          ) : (
-            vulnerabilities.slice(0, 12).map((vulnerability) => <VulnerabilityAlert key={vulnerability.id} vulnerability={vulnerability} />)
-          )}
-        </section>
       </main>
-    </>
+    </div>
   );
 }

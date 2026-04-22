@@ -1,89 +1,131 @@
-import crypto from "node:crypto";
+import CryptoJS from "crypto-js";
 
-interface StripeEvent {
-  id: string;
-  type: string;
-  data?: {
-    object?: {
-      id?: string;
-      customer_details?: {
-        email?: string | null;
-      };
-      customer_email?: string | null;
-      status?: string;
-      payment_status?: string;
-      expires_at?: number | null;
-      metadata?: Record<string, string>;
-    };
-  };
+import type { AccessTokenPayload } from "@/lib/types";
+
+const ACCESS_COOKIE_NAME = "iot_access";
+const ACCESS_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
+
+function signingSecret() {
+  return (
+    process.env.STRIPE_WEBHOOK_SECRET ||
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
+    "local-development-secret"
+  );
 }
 
-function parseStripeSignature(header: string | null): { timestamp: string; signature: string } | null {
-  if (!header) return null;
-  const parts = header.split(",").reduce<Record<string, string>>((acc, part) => {
-    const [key, value] = part.split("=");
-    if (key && value) acc[key] = value;
-    return acc;
-  }, {});
+function toBase64Url(value: string) {
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(value, "utf8").toString("base64url");
+  }
 
-  if (!parts.t || !parts.v1) return null;
-  return { timestamp: parts.t, signature: parts.v1 };
+  return btoa(unescape(encodeURIComponent(value)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
-export function verifyStripeWebhookSignature(rawBody: string, signatureHeader: string | null): boolean {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secret) return false;
+function fromBase64Url(value: string) {
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(value, "base64url").toString("utf8");
+  }
 
-  const parsed = parseStripeSignature(signatureHeader);
-  if (!parsed) return false;
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = `${base64}${"=".repeat((4 - (base64.length % 4)) % 4)}`;
+  return decodeURIComponent(escape(atob(padded)));
+}
 
-  const payload = `${parsed.timestamp}.${rawBody}`;
-  const expected = crypto.createHmac("sha256", secret).update(payload).digest("hex");
-
-  try {
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(parsed.signature));
-  } catch {
+function secureCompare(a: string, b: string) {
+  if (a.length !== b.length) {
     return false;
   }
+
+  let mismatch = 0;
+  for (let index = 0; index < a.length; index += 1) {
+    mismatch |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  }
+
+  return mismatch === 0;
 }
 
-export function parseStripeEvent(rawBody: string): StripeEvent | null {
+export function createAccessToken(
+  input: Omit<AccessTokenPayload, "exp">,
+  ttlSeconds = ACCESS_COOKIE_MAX_AGE
+) {
+  const payload: AccessTokenPayload = {
+    ...input,
+    exp: Date.now() + ttlSeconds * 1000
+  };
+
+  const encodedPayload = toBase64Url(JSON.stringify(payload));
+  const signature = CryptoJS.HmacSHA256(encodedPayload, signingSecret()).toString();
+
+  return `${encodedPayload}.${signature}`;
+}
+
+export function verifyAccessToken(token: string | undefined | null): AccessTokenPayload | null {
+  if (!token) {
+    return null;
+  }
+
+  const segments = token.split(".");
+  if (segments.length !== 2) {
+    return null;
+  }
+
+  const [encodedPayload, signature] = segments;
+  const expected = CryptoJS.HmacSHA256(encodedPayload, signingSecret()).toString();
+
+  if (!secureCompare(signature, expected)) {
+    return null;
+  }
+
   try {
-    return JSON.parse(rawBody) as StripeEvent;
+    const payload = JSON.parse(fromBase64Url(encodedPayload)) as AccessTokenPayload;
+
+    if (!payload.email || !payload.sessionId || !payload.exp) {
+      return null;
+    }
+
+    if (Date.now() > payload.exp) {
+      return null;
+    }
+
+    return payload;
   } catch {
     return null;
   }
 }
 
-export function extractCheckoutPurchase(event: StripeEvent): {
-  email: string;
-  sessionId: string;
-  status: "active" | "refunded";
-  expiresAt: string | null;
-} | null {
-  const object = event.data?.object;
-  if (!object?.id) return null;
-
-  const email = object.customer_details?.email || object.customer_email;
-  if (!email) return null;
-
-  if (event.type === "checkout.session.completed") {
-    return {
-      email,
-      sessionId: object.id,
-      status: object.payment_status === "paid" ? "active" : "refunded",
-      expiresAt: object.expires_at ? new Date(object.expires_at * 1000).toISOString() : null,
-    };
+export function verifyStripeWebhookSignature(
+  rawBody: string,
+  stripeSignature: string | null
+) {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret || !stripeSignature) {
+    return false;
   }
 
-  if (event.type === "checkout.session.expired") {
-    return {
-      email,
-      sessionId: object.id,
-      status: "refunded",
-      expiresAt: new Date().toISOString(),
-    };
+  const parts = stripeSignature.split(",").map((entry) => entry.trim());
+  const timestamp = parts.find((entry) => entry.startsWith("t="))?.replace("t=", "");
+  const signatures = parts
+    .filter((entry) => entry.startsWith("v1="))
+    .map((entry) => entry.replace("v1=", ""));
+
+  if (!timestamp || signatures.length === 0) {
+    return false;
   }
 
-  return null;
+  const signedPayload = `${timestamp}.${rawBody}`;
+  const expectedSignature = CryptoJS.HmacSHA256(signedPayload, secret).toString();
+
+  return signatures.some((signature) => secureCompare(signature, expectedSignature));
 }
+
+export const authCookie = {
+  name: ACCESS_COOKIE_NAME,
+  maxAge: ACCESS_COOKIE_MAX_AGE,
+  path: "/",
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production"
+};

@@ -1,41 +1,44 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { attachAccessCookie, findPurchase } from "@/lib/auth";
 
-export const runtime = "nodejs";
+import { getLatestActivePurchaseByEmail } from "@/lib/database";
+import { authCookie, createAccessToken } from "@/lib/lemonsqueezy";
 
 const claimSchema = z.object({
-  sessionId: z.string().min(5)
+  email: z.string().email()
 });
 
 export async function POST(request: Request) {
-  try {
-    const payload = claimSchema.parse(await request.json());
+  const json = await request.json().catch(() => ({}));
+  const parsed = claimSchema.safeParse(json);
 
-    const purchase = await findPurchase(payload.sessionId);
-    if (!purchase) {
-      return NextResponse.json(
-        {
-          error:
-            "Session not found yet. Stripe webhook may still be pending. Confirm webhook delivery or retry in a minute."
-        },
-        { status: 404 }
-      );
-    }
-
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 30);
-
-    const response = NextResponse.json({ ok: true });
-    attachAccessCookie(response, {
-      sessionId: purchase.sessionId,
-      email: purchase.email,
-      purchasedAt: purchase.createdAt,
-      expiresAt: expiresAt.toISOString()
-    });
-
-    return response;
-  } catch {
-    return NextResponse.json({ error: "Invalid request payload." }, { status: 400 });
+  if (!parsed.success) {
+    return NextResponse.json(
+      {
+        error: "A valid email is required"
+      },
+      { status: 400 }
+    );
   }
+
+  const purchase = await getLatestActivePurchaseByEmail(parsed.data.email);
+
+  if (!purchase) {
+    return NextResponse.json(
+      {
+        error: "No active purchase found for that email"
+      },
+      { status: 404 }
+    );
+  }
+
+  const token = createAccessToken({
+    email: purchase.email,
+    sessionId: purchase.sessionId
+  });
+
+  const response = NextResponse.json({ ok: true });
+  response.cookies.set(authCookie.name, token, authCookie);
+
+  return response;
 }

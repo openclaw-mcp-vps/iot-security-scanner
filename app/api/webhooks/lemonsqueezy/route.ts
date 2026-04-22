@@ -1,30 +1,83 @@
 import { NextResponse } from "next/server";
-import { extractCheckoutPurchase, parseStripeEvent, verifyStripeWebhookSignature } from "@/lib/lemonsqueezy";
+
 import { upsertPurchase } from "@/lib/database";
+import { verifyStripeWebhookSignature } from "@/lib/lemonsqueezy";
+
+interface StripeEvent {
+  type: string;
+  data?: {
+    object?: {
+      id?: string;
+      customer?: string;
+      customer_email?: string;
+      customer_details?: {
+        email?: string;
+      };
+      status?: string;
+      payment_status?: string;
+    };
+  };
+}
+
+function eventToPurchase(event: StripeEvent) {
+  const object = event.data?.object;
+  if (!object?.id) {
+    return null;
+  }
+
+  const email = object.customer_details?.email ?? object.customer_email;
+  if (!email) {
+    return null;
+  }
+
+  const activeEvent =
+    event.type === "checkout.session.completed" ||
+    event.type === "checkout.session.async_payment_succeeded";
+
+  const canceledEvent =
+    event.type === "checkout.session.expired" || event.type === "customer.subscription.deleted";
+
+  if (!activeEvent && !canceledEvent) {
+    return null;
+  }
+
+  return {
+    sessionId: object.id,
+    email,
+    customerId: object.customer ?? "unknown",
+    status: activeEvent ? ("active" as const) : ("canceled" as const),
+    purchasedAt: new Date().toISOString()
+  };
+}
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
-  const signature = request.headers.get("stripe-signature");
+  const stripeSignature = request.headers.get("stripe-signature");
 
-  if (!verifyStripeWebhookSignature(rawBody, signature)) {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
+  if (!verifyStripeWebhookSignature(rawBody, stripeSignature)) {
+    return NextResponse.json(
+      {
+        error: "Invalid webhook signature"
+      },
+      { status: 401 }
+    );
   }
 
-  const event = parseStripeEvent(rawBody);
-  if (!event) {
-    return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
+  const event = JSON.parse(rawBody) as StripeEvent;
+  const purchase = eventToPurchase(event);
+
+  if (!purchase) {
+    return NextResponse.json({ received: true, ignored: true });
   }
 
-  const purchase = extractCheckoutPurchase(event);
-  if (purchase) {
-    await upsertPurchase({
-      email: purchase.email,
-      stripe_session_id: purchase.sessionId,
-      status: purchase.status,
-      purchased_at: new Date().toISOString(),
-      expires_at: purchase.expiresAt,
-    });
-  }
+  await upsertPurchase(purchase);
 
   return NextResponse.json({ received: true });
+}
+
+export async function GET() {
+  return NextResponse.json({
+    endpoint: "stripe-compatible webhook receiver",
+    status: "ready"
+  });
 }

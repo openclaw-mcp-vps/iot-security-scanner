@@ -11,15 +11,14 @@ NICHE: security-tools
 PRICE: $$12/mo
 
 ARCHITECTURE SPEC:
-A Next.js web application that provides network scanning capabilities through a local agent/CLI tool that users install on their home network. The web dashboard displays scan results, vulnerability reports, and security recommendations with real-time monitoring.
+A Next.js web app that performs network scanning via a local agent/CLI tool to discover IoT devices, then cross-references findings with vulnerability databases through APIs. The web dashboard displays scan results, device inventory, and security recommendations with subscription management.
 
 PLANNED FILES:
 - app/page.tsx
 - app/dashboard/page.tsx
 - app/scan/page.tsx
 - app/devices/page.tsx
-- app/api/scans/route.ts
-- app/api/devices/route.ts
+- app/api/scan/route.ts
 - app/api/vulnerabilities/route.ts
 - app/api/webhooks/lemonsqueezy/route.ts
 - components/DeviceCard.tsx
@@ -29,10 +28,10 @@ PLANNED FILES:
 - lib/vulnerability-db.ts
 - lib/lemonsqueezy.ts
 - lib/database.ts
-- prisma/schema.prisma
-- scripts/install-agent.sh
+- scanner-cli/index.js
+- scanner-cli/network-discovery.js
 
-DEPENDENCIES: next, react, typescript, tailwindcss, prisma, @prisma/client, postgres, @lemonsqueezy/lemonsqueezy.js, node-nmap, axios, recharts, lucide-react, next-auth, bcryptjs, jsonwebtoken, zod, date-fns
+DEPENDENCIES: next, tailwindcss, prisma, @prisma/client, next-auth, @lemonsqueezy/lemonsqueezy.js, node-nmap, axios, zod, lucide-react, recharts, crypto-js
 
 REQUIREMENTS:
 - Next.js 15 with App Router (app/ directory)

@@ -1,50 +1,64 @@
+import { Activity, EthernetPort, Shield, ShieldX, Smartphone } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DeviceRecord } from "@/lib/types";
 
-interface DeviceCardProps {
-  device: DeviceRecord;
-  vulnerabilityCount: number;
+function riskBadge(riskScore: number) {
+  if (riskScore >= 70) {
+    return {
+      label: "High risk",
+      variant: "danger" as const,
+      icon: <ShieldX className="h-4 w-4" />
+    };
+  }
+
+  if (riskScore >= 40) {
+    return {
+      label: "Medium risk",
+      variant: "warning" as const,
+      icon: <Shield className="h-4 w-4" />
+    };
+  }
+
+  return {
+    label: "Low risk",
+    variant: "default" as const,
+    icon: <Shield className="h-4 w-4" />
+  };
 }
 
-function riskVariant(score: number): "success" | "warning" | "danger" {
-  if (score >= 70) return "danger";
-  if (score >= 45) return "warning";
-  return "success";
-}
+export function DeviceCard({ device }: { device: DeviceRecord }) {
+  const risk = riskBadge(device.riskScore);
 
-export function DeviceCard({ device, vulnerabilityCount }: DeviceCardProps) {
   return (
-    <Card>
-      <CardHeader className="pb-4">
+    <Card className="h-full border-slate-800 bg-slate-950/40">
+      <CardHeader className="space-y-3">
         <div className="flex items-start justify-between gap-2">
-          <div>
-            <CardTitle>{device.hostname || device.model || device.ip_address}</CardTitle>
-            <CardDescription>
-              {device.vendor ? `${device.vendor} • ` : ""}
-              {device.model || "Unknown model"}
-            </CardDescription>
-          </div>
-          <Badge variant={riskVariant(device.risk_score)}>Risk {device.risk_score}</Badge>
+          <CardTitle className="text-lg text-slate-100">{device.model}</CardTitle>
+          <Badge variant={risk.variant} className="inline-flex items-center gap-1">
+            {risk.icon}
+            {risk.label}
+          </Badge>
         </div>
+        <p className="text-sm text-slate-400">{device.vendor} • {device.type}</p>
       </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        <div className="text-slate-300">
-          <p>
-            <span className="text-slate-500">IP:</span> {device.ip_address}
-          </p>
-          <p>
-            <span className="text-slate-500">MAC:</span> {device.mac_address || "Unknown"}
-          </p>
-          <p>
-            <span className="text-slate-500">Ports:</span>{" "}
-            {device.open_ports.length ? device.open_ports.join(", ") : "No open ports detected"}
-          </p>
+      <CardContent className="space-y-3 text-sm text-slate-300">
+        <div className="flex items-center gap-2">
+          <Smartphone className="h-4 w-4 text-cyan-300" />
+          <span>{device.ip}</span>
         </div>
-        <div className="flex items-center justify-between border-t border-slate-700 pt-3">
-          <span className="text-slate-400">Linked vulnerabilities</span>
-          <Badge variant={vulnerabilityCount > 0 ? "danger" : "success"}>{vulnerabilityCount}</Badge>
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-emerald-300" />
+          <span>{device.vulnerabilities.length} vulnerability findings</span>
         </div>
+        <div className="flex items-center gap-2">
+          <EthernetPort className="h-4 w-4 text-amber-300" />
+          <span>
+            Ports: {device.openPorts.length ? device.openPorts.join(", ") : "No open management ports detected"}
+          </span>
+        </div>
+        <p className="text-xs text-slate-500">Last seen: {new Date(device.lastSeen).toLocaleString()}</p>
       </CardContent>
     </Card>
   );

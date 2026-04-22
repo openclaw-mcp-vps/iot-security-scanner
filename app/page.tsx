@@ -1,202 +1,202 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { CheckCircle2, Radar, ShieldAlert, Router, LockKeyhole, BellRing } from "lucide-react";
-import { TopNav } from "@/components/TopNav";
-import { UnlockForm } from "@/components/UnlockForm";
-import { Accordion } from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Lock,
+  Radar,
+  Router,
+  Shield,
+  ShieldAlert,
+  Wifi
+} from "lucide-react";
 
-const faqItems = [
+import { AppHeader } from "@/components/AppHeader";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+
+export const metadata: Metadata = {
+  title: "Scan home IoT devices for security vulnerabilities",
+  description:
+    "Identify every smart device on your network, map known vulnerabilities by model, and get practical actions to reduce attack surface in your home office."
+};
+
+const faq = [
   {
-    value: "faq-1",
-    trigger: "How is this different from a one-time nmap scan?",
-    content:
-      "A one-time scan gives raw ports. IoT Security Scanner continuously correlates your device models against known exploited CVEs, highlights what attackers are actively using, and gives prioritized fixes.",
+    question: "Will this scan devices outside my home network?",
+    answer:
+      "No. The scanner is designed for your local network segment and only inspects reachable LAN devices and their exposed services."
   },
   {
-    value: "faq-2",
-    trigger: "Do I need enterprise networking gear?",
-    content:
-      "No. Install the lightweight local agent on any always-on machine in your home network. It scans your local subnet and syncs findings to your dashboard.",
+    question: "Does this replace antivirus software?",
+    answer:
+      "No. It complements endpoint security by focusing on unmanaged IoT equipment such as cameras, routers, hubs, and smart appliances."
   },
   {
-    value: "faq-3",
-    trigger: "Will this break my smart home setup?",
-    content:
-      "The scanner is non-intrusive and focuses on discovery plus vulnerability correlation. It does not exploit devices or change network settings automatically.",
+    question: "How quickly are new vulnerabilities surfaced?",
+    answer:
+      "The dashboard checks known vulnerability feeds and flags newly relevant CVEs for your detected device models after each scan."
   },
   {
-    value: "faq-4",
-    trigger: "Can I use it for a home office with client data?",
-    content:
-      "Yes. The dashboard is designed for remote workers and solo operators who need practical risk visibility without enterprise security tooling complexity.",
-  },
+    question: "Can I use this for a small home office?",
+    answer:
+      "Yes. It is built for prosumer and home-office setups where enterprise SOC tooling is excessive but risk is still real."
+  }
+];
+
+const stats = [
+  "Most smart homes run 20+ connected endpoints.",
+  "Default credentials remain one of the most exploited IoT weaknesses.",
+  "Botnet campaigns routinely target consumer routers and IP cameras."
 ];
 
 export default function LandingPage() {
   return (
-    <>
-      <TopNav />
+    <div className="min-h-screen">
+      <AppHeader />
       <main>
-        <section className="relative overflow-hidden border-b border-slate-800">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(74,222,128,0.18),transparent_45%),radial-gradient(circle_at_80%_20%,rgba(59,130,246,0.15),transparent_35%)]" />
-          <div className="relative mx-auto grid max-w-6xl gap-10 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:px-8 lg:py-24">
-            <div className="space-y-6">
-              <Badge variant="warning" className="w-fit">
-                Home Network Attack Surface Monitoring
-              </Badge>
-              <h1 className="text-4xl font-semibold leading-tight text-slate-50 sm:text-5xl">
-                Scan home IoT devices before they become your weakest security link.
-              </h1>
-              <p className="max-w-xl text-lg text-slate-300">
-                Discover every connected camera, router, lock, speaker, and hub on your network. Match each device model to
-                current CVEs and get a prioritized remediation plan you can apply in one evening.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <a
-                  href={process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK}
-                  className="rounded-md bg-green-500 px-6 py-3 text-sm font-semibold text-slate-950 hover:bg-green-400"
-                >
-                  Protect My Network - $12/month
-                </a>
-                <Link
-                  href="#paywall"
-                  className="rounded-md border border-slate-600 px-6 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-800"
-                >
-                  Already Purchased? Unlock
-                </Link>
-              </div>
-              <p className="text-sm text-slate-400">Trusted by smart-home users, remote workers, and home-office consultants.</p>
-            </div>
-            <div className="rounded-2xl border border-slate-700 bg-slate-900/65 p-6 shadow-2xl">
-              <h2 className="text-lg font-semibold text-slate-100">What you get immediately</h2>
-              <ul className="mt-4 space-y-3 text-sm text-slate-300">
-                <li className="flex items-start gap-2">
-                  <Radar className="mt-0.5 h-4 w-4 text-green-300" />
-                  Full subnet discovery with open port mapping for IoT endpoints.
-                </li>
-                <li className="flex items-start gap-2">
-                  <ShieldAlert className="mt-0.5 h-4 w-4 text-red-300" />
-                  CVE correlation against known exploited vulnerabilities.
-                </li>
-                <li className="flex items-start gap-2">
-                  <BellRing className="mt-0.5 h-4 w-4 text-amber-300" />
-                  Continuous threat monitoring for your exact device vendors/models.
-                </li>
-                <li className="flex items-start gap-2">
-                  <LockKeyhole className="mt-0.5 h-4 w-4 text-sky-300" />
-                  Actionable hardening checklist with priority and effort guidance.
-                </li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
-          <div className="grid gap-6 md:grid-cols-3">
-            <article className="rounded-xl border border-slate-700 bg-slate-900/45 p-6">
-              <h3 className="text-lg font-semibold text-slate-100">The Problem</h3>
-              <p className="mt-2 text-sm text-slate-300">
-                Most homes now run 20+ connected devices, many shipped with weak defaults and long-unpatched firmware.
-                Attackers target these devices because they are always on and rarely monitored.
-              </p>
-            </article>
-            <article className="rounded-xl border border-slate-700 bg-slate-900/45 p-6">
-              <h3 className="text-lg font-semibold text-slate-100">The Solution</h3>
-              <p className="mt-2 text-sm text-slate-300">
-                Install a local scanning agent, visualize your real exposure in the dashboard, then apply targeted fixes for
-                high-risk devices first.
-              </p>
-            </article>
-            <article className="rounded-xl border border-slate-700 bg-slate-900/45 p-6">
-              <h3 className="text-lg font-semibold text-slate-100">Who It Protects</h3>
-              <p className="mt-2 text-sm text-slate-300">
-                Built for tech-savvy homeowners, remote professionals with client data obligations, and home-office small
-                businesses without a dedicated IT security team.
-              </p>
-            </article>
-          </div>
-        </section>
-
-        <section className="border-y border-slate-800 bg-slate-950/30">
-          <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
-            <h2 className="text-3xl font-semibold text-slate-100">Security outcomes, not vanity metrics</h2>
-            <div className="mt-8 grid gap-4 md:grid-cols-2">
-              {[
-                {
-                  title: "Find unknown devices",
-                  description:
-                    "Detect unmanaged smart plugs, DVRs, and cameras that were quietly added and never hardened.",
-                  icon: Router,
-                },
-                {
-                  title: "Prioritize high-risk CVEs",
-                  description:
-                    "Surface vulnerabilities actively exploited in the wild so you can fix the biggest risks first.",
-                  icon: ShieldAlert,
-                },
-                {
-                  title: "Reduce lateral movement risk",
-                  description:
-                    "Get segmentation recommendations to isolate IoT from laptops, NAS storage, and work systems.",
-                  icon: LockKeyhole,
-                },
-                {
-                  title: "Track risk over time",
-                  description:
-                    "Monitor whether your exposure is improving after firmware updates and configuration changes.",
-                  icon: CheckCircle2,
-                },
-              ].map((item) => (
-                <article key={item.title} className="rounded-xl border border-slate-700 bg-slate-900/45 p-5">
-                  <item.icon className="h-5 w-5 text-green-400" />
-                  <h3 className="mt-3 text-base font-semibold text-slate-100">{item.title}</h3>
-                  <p className="mt-1 text-sm text-slate-300">{item.description}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="pricing" className="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
-          <div className="rounded-2xl border border-green-600/40 bg-gradient-to-br from-slate-900 to-slate-950 p-8 shadow-xl">
-            <h2 className="text-3xl font-semibold text-slate-50">Simple pricing for serious protection</h2>
-            <p className="mt-2 text-slate-300">One plan, full visibility for your home network and office devices.</p>
-            <div className="mt-6 flex items-baseline gap-2">
-              <span className="text-4xl font-bold text-slate-50">$12</span>
-              <span className="text-slate-400">/month</span>
-            </div>
-            <ul className="mt-6 space-y-2 text-sm text-slate-300">
-              <li>Unlimited scans for one home network</li>
-              <li>Continuous CVE monitoring by device model</li>
-              <li>Remediation guidance with severity-based prioritization</li>
-              <li>Threat trend dashboard and historical scan records</li>
-            </ul>
-            <a
-              href={process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK}
-              className="mt-8 inline-flex rounded-md bg-green-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-green-400"
-            >
-              Buy Secure Access
-            </a>
-          </div>
-        </section>
-
-        <section id="paywall" className="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8">
-          <div className="rounded-xl border border-slate-700 bg-slate-900/45 p-6">
-            <h2 className="text-2xl font-semibold text-slate-100">Already subscribed?</h2>
-            <p className="mt-2 text-sm text-slate-300">
-              Use your checkout email to issue a secure access cookie and open the scanner dashboard.
+        <section className="mx-auto grid w-full max-w-6xl gap-10 px-4 pb-20 pt-14 sm:px-6 lg:grid-cols-[1.2fr_0.8fr] lg:gap-14 lg:px-8">
+          <div>
+            <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-600/40 bg-emerald-900/30 px-3 py-1 text-xs font-semibold tracking-wide text-emerald-200">
+              <Shield className="h-3.5 w-3.5" />
+              Security tools for smart homes and home offices
             </p>
-            <div className="mt-6">
-              <UnlockForm />
+            <h1 className="font-[var(--font-heading)] text-4xl font-bold leading-tight text-slate-100 sm:text-5xl">
+              Scan home IoT devices for security vulnerabilities before attackers do.
+            </h1>
+            <p className="mt-5 max-w-2xl text-lg leading-relaxed text-slate-300">
+              IoT Security Scanner discovers devices on your local network, checks their model families against known CVEs, and gives concrete hardening steps you can apply immediately.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <Button asChild size="lg" className="font-semibold">
+                <a href={process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK}>Start protecting your network for $12/mo</a>
+              </Button>
+              <Button asChild variant="outline" size="lg">
+                <Link href="/access/success">I already purchased</Link>
+              </Button>
             </div>
+            <p className="mt-3 text-sm text-slate-400">
+              Hosted Stripe checkout. No card data touches your app.
+            </p>
+          </div>
+
+          <Card className="border-slate-800 bg-slate-950/60">
+            <CardHeader>
+              <CardTitle className="text-slate-100">What you get in each scan</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm text-slate-300">
+              <div className="flex items-start gap-3">
+                <Radar className="mt-0.5 h-4 w-4 text-cyan-300" />
+                <p>Device discovery across local subnets with host fingerprinting and service exposure mapping.</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="mt-0.5 h-4 w-4 text-rose-300" />
+                <p>Vulnerability matching against known IoT weaknesses and model-specific CVE intelligence.</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <Lock className="mt-0.5 h-4 w-4 text-emerald-300" />
+                <p>Actionable recommendations prioritized by exploitability, not generic security advice.</p>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="border-y border-slate-800/80 bg-slate-900/30">
+          <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-3 lg:px-8">
+            {stats.map((item) => (
+              <div key={item} className="rounded-lg border border-slate-800 bg-slate-950/50 p-4 text-sm text-slate-300">
+                <AlertTriangle className="mb-2 h-4 w-4 text-amber-300" />
+                {item}
+              </div>
+            ))}
           </div>
         </section>
 
-        <section className="mx-auto max-w-4xl px-4 pb-20 sm:px-6 lg:px-8">
-          <h2 className="mb-4 text-2xl font-semibold text-slate-100">FAQ</h2>
-          <Accordion items={faqItems} />
+        <section className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 lg:px-8">
+          <h2 className="font-[var(--font-heading)] text-3xl font-semibold text-slate-100">Why this matters now</h2>
+          <p className="mt-3 max-w-3xl text-slate-300">
+            Home networks have become hybrid work infrastructure. A compromised camera, router, or smart assistant can become a foothold into laptops containing client files, payroll access, or confidential communications.
+          </p>
+          <div className="mt-8 grid gap-5 md:grid-cols-3">
+            <Card className="border-slate-800 bg-slate-950/50">
+              <CardHeader>
+                <CardTitle className="text-lg">1. Discover</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-slate-300">
+                Scan your live network and inventory every detected IoT endpoint, including devices you forgot were online.
+              </CardContent>
+            </Card>
+            <Card className="border-slate-800 bg-slate-950/50">
+              <CardHeader>
+                <CardTitle className="text-lg">2. Assess</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-slate-300">
+                Correlate open services and device models with vulnerability data to prioritize practical risk.
+              </CardContent>
+            </Card>
+            <Card className="border-slate-800 bg-slate-950/50">
+              <CardHeader>
+                <CardTitle className="text-lg">3. Harden</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-slate-300">
+                Follow model-specific remediation steps: firmware updates, admin lock-down, and safer network segmentation.
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
+        <section id="pricing" className="mx-auto w-full max-w-6xl px-4 pb-16 sm:px-6 lg:px-8">
+          <Card className="border-emerald-700/40 bg-gradient-to-br from-emerald-900/30 via-slate-900 to-slate-950">
+            <CardContent className="grid gap-8 p-8 md:grid-cols-[1.2fr_0.8fr] md:items-center">
+              <div>
+                <h3 className="font-[var(--font-heading)] text-3xl font-semibold text-slate-100">Simple pricing for ongoing protection</h3>
+                <p className="mt-3 text-slate-300">
+                  <span className="text-4xl font-bold text-emerald-300">$12</span>
+                  <span className="ml-2 text-slate-400">/ month</span>
+                </p>
+                <ul className="mt-5 space-y-2 text-sm text-slate-200">
+                  <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-300" />Unlimited scans and device inventory</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-300" />New vulnerability alerts mapped to your device models</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-300" />Action plans for high-risk exposures</li>
+                </ul>
+              </div>
+              <div className="rounded-lg border border-slate-700 bg-slate-950/70 p-5">
+                <p className="text-sm text-slate-300">Paywall-protected dashboard with cookie-based access after successful checkout.</p>
+                <Button asChild className="mt-4 w-full" size="lg">
+                  <a href={process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK}>Buy with Stripe</a>
+                </Button>
+                <Button asChild variant="secondary" className="mt-3 w-full">
+                  <Link href="/access/success">Activate existing purchase</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:px-8">
+          <h2 className="font-[var(--font-heading)] text-3xl font-semibold text-slate-100">FAQ</h2>
+          <Separator className="my-6" />
+          <div className="grid gap-4 md:grid-cols-2">
+            {faq.map((entry) => (
+              <Card key={entry.question} className="border-slate-800 bg-slate-950/50">
+                <CardContent className="p-5">
+                  <p className="font-semibold text-slate-100">{entry.question}</p>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-300">{entry.answer}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <div className="mt-10 flex items-center gap-2 text-sm text-slate-400">
+            <Wifi className="h-4 w-4" />
+            Built for tech-savvy homeowners, remote workers, and small home-office operators.
+          </div>
+          <div className="mt-2 flex items-center gap-2 text-sm text-slate-400">
+            <Router className="h-4 w-4" />
+            Scan locally. Keep visibility over the devices that actually exist on your network.
+          </div>
         </section>
       </main>
-    </>
+    </div>
   );
 }
