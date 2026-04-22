@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["node-nmap", "cron", "nodemailer"]
+  reactStrictMode: true,
 };
 
 export default nextConfig;

@@ -11,27 +11,28 @@ NICHE: security-tools
 PRICE: $$12/mo
 
 ARCHITECTURE SPEC:
-A Next.js web app that provides network scanning tools and device vulnerability tracking. Users authenticate, run network scans through a secure scanning service, and receive ongoing monitoring with email alerts for new vulnerabilities affecting their detected devices.
+A Next.js web application that provides network scanning capabilities through a local agent/CLI tool that users install on their home network. The web dashboard displays scan results, vulnerability reports, and security recommendations with real-time monitoring.
 
 PLANNED FILES:
 - app/page.tsx
 - app/dashboard/page.tsx
 - app/scan/page.tsx
 - app/devices/page.tsx
-- app/api/scan/route.ts
+- app/api/scans/route.ts
 - app/api/devices/route.ts
 - app/api/vulnerabilities/route.ts
 - app/api/webhooks/lemonsqueezy/route.ts
-- components/NetworkScanner.tsx
-- components/DeviceList.tsx
+- components/DeviceCard.tsx
 - components/VulnerabilityAlert.tsx
-- components/SecurityScore.tsx
+- components/ScanProgress.tsx
 - lib/scanner.ts
 - lib/vulnerability-db.ts
 - lib/lemonsqueezy.ts
-- lib/auth.ts
+- lib/database.ts
+- prisma/schema.prisma
+- scripts/install-agent.sh
 
-DEPENDENCIES: next, tailwindcss, prisma, @prisma/client, next-auth, @lemonsqueezy/lemonsqueezy.js, node-nmap, axios, zod, lucide-react, recharts, nodemailer, cron
+DEPENDENCIES: next, react, typescript, tailwindcss, prisma, @prisma/client, postgres, @lemonsqueezy/lemonsqueezy.js, node-nmap, axios, recharts, lucide-react, next-auth, bcryptjs, jsonwebtoken, zod, date-fns
 
 REQUIREMENTS:
 - Next.js 15 with App Router (app/ directory)

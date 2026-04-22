@@ -1,49 +1,28 @@
 import { NextResponse } from "next/server";
-import { recordPurchase } from "@/lib/auth";
-import { verifyStripeWebhookSignature } from "@/lib/lemonsqueezy";
-
-export const runtime = "nodejs";
-
-interface StripeCheckoutSession {
-  id: string;
-  amount_total?: number;
-  currency?: string;
-  customer_details?: {
-    email?: string;
-  };
-}
+import { extractCheckoutPurchase, parseStripeEvent, verifyStripeWebhookSignature } from "@/lib/lemonsqueezy";
+import { upsertPurchase } from "@/lib/database";
 
 export async function POST(request: Request) {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secret) {
-    return NextResponse.json({ error: "Missing STRIPE_WEBHOOK_SECRET" }, { status: 500 });
-  }
-
-  const payload = await request.text();
+  const rawBody = await request.text();
   const signature = request.headers.get("stripe-signature");
 
-  const valid = verifyStripeWebhookSignature(payload, signature, secret);
-  if (!valid) {
-    return NextResponse.json({ error: "Invalid webhook signature" }, { status: 400 });
+  if (!verifyStripeWebhookSignature(rawBody, signature)) {
+    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  const event = JSON.parse(payload) as {
-    type: string;
-    data?: {
-      object?: StripeCheckoutSession;
-    };
-  };
+  const event = parseStripeEvent(rawBody);
+  if (!event) {
+    return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
+  }
 
-  if (event.type === "checkout.session.completed" && event.data?.object?.id) {
-    const session = event.data.object;
-
-    await recordPurchase({
-      sessionId: session.id,
-      email: session.customer_details?.email,
-      amountTotal: session.amount_total,
-      currency: session.currency,
-      createdAt: new Date().toISOString(),
-      status: "paid"
+  const purchase = extractCheckoutPurchase(event);
+  if (purchase) {
+    await upsertPurchase({
+      email: purchase.email,
+      stripe_session_id: purchase.sessionId,
+      status: purchase.status,
+      purchased_at: new Date().toISOString(),
+      expires_at: purchase.expiresAt,
     });
   }
 

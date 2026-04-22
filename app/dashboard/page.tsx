@@ -1,99 +1,121 @@
-import Link from "next/link";
-import { AlertTriangle, Shield } from "lucide-react";
-import { DeviceList } from "@/components/DeviceList";
-import { SecurityScore } from "@/components/SecurityScore";
-import { VulnerabilityAlert } from "@/components/VulnerabilityAlert";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { requirePaidAccess } from "@/lib/auth";
-import { calculateNetworkSecurityScore, getLatestScan, getStoredDevices } from "@/lib/scanner";
+import { formatDistanceToNow } from "date-fns";
+import { Activity, AlertTriangle, ShieldCheck, Wifi } from "lucide-react";
+import { TopNav } from "@/components/TopNav";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ExposureChart } from "@/components/ExposureChart";
+import { listDevices, listScans, listVulnerabilities } from "@/lib/database";
+import { requirePaidAccess } from "@/lib/paywall";
 
 export default async function DashboardPage() {
   await requirePaidAccess();
 
-  const [devices, latestScan] = await Promise.all([getStoredDevices(), getLatestScan()]);
-  const score = calculateNetworkSecurityScore(devices);
-  const topFindings = devices.flatMap((device) => device.vulnerabilities).slice(0, 5);
+  const [scans, devices, vulnerabilities] = await Promise.all([listScans(8), listDevices(), listVulnerabilities()]);
+  const critical = vulnerabilities.filter((entry) => entry.severity === "critical" || entry.severity === "high");
+
+  const chartData = scans
+    .slice()
+    .reverse()
+    .map((scan) => ({
+      name: new Date(scan.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      devices: scan.device_count,
+      critical: scan.high_severity_count,
+    }));
 
   return (
-    <div className="space-y-6 pb-8">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold">Security Dashboard</h1>
-          <p className="text-sm text-[#9aa4af]">Track risky devices, vulnerability exposure, and overall network hygiene.</p>
-        </div>
-        <div className="flex gap-2">
-          <Link className="rounded-md border border-[#30363d] px-4 py-2 text-sm hover:bg-[#161b22]" href="/scan">
-            Run Scan
-          </Link>
-          <Link className="rounded-md border border-[#30363d] px-4 py-2 text-sm hover:bg-[#161b22]" href="/devices">
-            Device Inventory
-          </Link>
-        </div>
-      </header>
+    <>
+      <TopNav showAppLinks showLogout />
+      <main className="mx-auto w-full max-w-6xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+        <section className="space-y-2">
+          <h1 className="text-3xl font-semibold text-slate-100">Security Dashboard</h1>
+          <p className="text-sm text-slate-400">
+            Real-time exposure summary for your home network, prioritized by exploitability and operational risk.
+          </p>
+        </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Detected Devices</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-bold">{devices.length}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Critical Devices</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-bold text-red-400">
-            {devices.filter((device) => device.riskLevel === "critical").length}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Last Scan</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-[#9aa4af]">
-            {latestScan ? new Date(latestScan.completedAt).toLocaleString() : "No scan has been run yet."}
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-        <SecurityScore score={score} devices={devices.length} />
-        <Card>
-          <CardHeader>
-            <CardTitle>Immediate Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-[#9aa4af]">
-            <p className="flex gap-2">
-              <Shield className="mt-0.5 h-4 w-4 text-blue-400" />
-              Disable remote admin access on routers unless a VPN is required.
-            </p>
-            <p className="flex gap-2">
-              <AlertTriangle className="mt-0.5 h-4 w-4 text-yellow-400" />
-              Change default credentials on every camera, lock, and thermostat.
-            </p>
-            <p className="flex gap-2">
-              <Shield className="mt-0.5 h-4 w-4 text-blue-400" />
-              Segment IoT devices away from work laptops using guest SSID or VLANs.
-            </p>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-xl font-semibold">Top Vulnerability Alerts</h2>
-        {topFindings.length > 0 ? (
-          <div className="grid gap-3">{topFindings.map((finding) => <VulnerabilityAlert key={finding.id} vulnerability={finding} />)}</div>
-        ) : (
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Card>
-            <CardContent>No active alerts yet. Run a scan to analyze your environment.</CardContent>
+            <CardHeader className="pb-2">
+              <CardDescription>Total Devices</CardDescription>
+              <CardTitle className="text-3xl">{devices.length}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex items-center gap-2 text-xs text-slate-400">
+              <Wifi className="h-4 w-4 text-green-400" />
+              Device inventory across latest scans
+            </CardContent>
           </Card>
-        )}
-      </section>
 
-      <section className="space-y-3">
-        <h2 className="text-xl font-semibold">Device Snapshot</h2>
-        <DeviceList devices={devices.slice(0, 6)} />
-      </section>
-    </div>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Critical/High CVEs</CardDescription>
+              <CardTitle className="text-3xl">{critical.length}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex items-center gap-2 text-xs text-slate-400">
+              <AlertTriangle className="h-4 w-4 text-red-400" />
+              Immediate remediation recommended
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Completed Scans</CardDescription>
+              <CardTitle className="text-3xl">{scans.length}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex items-center gap-2 text-xs text-slate-400">
+              <Activity className="h-4 w-4 text-amber-400" />
+              Includes local agent submissions
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Protection Status</CardDescription>
+              <CardTitle className="text-3xl">{critical.length ? "At Risk" : "Hardened"}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex items-center gap-2 text-xs text-slate-400">
+              <ShieldCheck className="h-4 w-4 text-sky-400" />
+              Based on latest threat correlation
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Risk Trend</CardTitle>
+              <CardDescription>Device count and critical findings over recent scans.</CardDescription>
+            </CardHeader>
+            <CardContent>{chartData.length ? <ExposureChart data={chartData} /> : <p className="text-sm text-slate-400">Run your first scan to populate trend data.</p>}</CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Scans</CardTitle>
+              <CardDescription>Most recent scanner activity.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {scans.length === 0 ? (
+                <p className="text-sm text-slate-400">No scans yet. Go to Scan and start your first check.</p>
+              ) : (
+                scans.slice(0, 6).map((scan) => (
+                  <div key={scan.id} className="rounded-md border border-slate-700 bg-slate-900/70 p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-slate-200">{scan.network_range}</p>
+                      <Badge variant={scan.status === "completed" ? "success" : "warning"}>{scan.status}</Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-400">
+                      {scan.device_count} devices • {scan.high_severity_count} critical/high findings
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {formatDistanceToNow(new Date(scan.started_at), { addSuffix: true })}
+                    </p>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </section>
+      </main>
+    </>
   );
 }

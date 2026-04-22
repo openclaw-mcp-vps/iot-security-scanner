@@ -1,36 +1,24 @@
 import { NextResponse } from "next/server";
-import { hasPaidAccess } from "@/lib/auth";
-import { getStoredDevices } from "@/lib/scanner";
-import { getLiveThreatsForDevices, startBackgroundThreatMonitor, trackNewThreats } from "@/lib/vulnerability-db";
+import { z } from "zod";
+import { getAccessSession } from "@/lib/paywall";
+import { listVulnerabilities } from "@/lib/database";
 
-export const runtime = "nodejs";
+const querySchema = z.object({
+  severity: z.enum(["critical", "high", "medium", "low"]).optional(),
+});
 
-export async function GET() {
-  if (!(await hasPaidAccess())) {
-    return NextResponse.json({ error: "Upgrade required" }, { status: 402 });
+export async function GET(request: Request) {
+  const session = await getAccessSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const devices = await getStoredDevices();
-  startBackgroundThreatMonitor(getStoredDevices);
+  const { searchParams } = new URL(request.url);
+  const parsed = querySchema.safeParse({ severity: searchParams.get("severity") ?? undefined });
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid severity filter" }, { status: 400 });
+  }
 
-  const [liveThreats, newThreats] = await Promise.all([getLiveThreatsForDevices(devices), trackNewThreats(devices)]);
-
-  const byDevice = devices.map((device) => ({
-    deviceId: device.id,
-    ip: device.ip,
-    hostname: device.hostname,
-    deviceType: device.deviceType,
-    localMatches: device.vulnerabilities,
-    liveMatches: liveThreats[device.id] ?? []
-  }));
-
-  return NextResponse.json({
-    devices: byDevice,
-    newThreats,
-    summary: {
-      deviceCount: devices.length,
-      totalLocalVulnerabilities: devices.reduce((acc, device) => acc + device.vulnerabilities.length, 0),
-      totalLiveMatches: Object.values(liveThreats).reduce((acc, list) => acc + list.length, 0)
-    }
-  });
+  const vulnerabilities = await listVulnerabilities(parsed.data.severity);
+  return NextResponse.json({ vulnerabilities });
 }

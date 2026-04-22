@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
-import { hasPaidAccess } from "@/lib/auth";
-import { calculateNetworkSecurityScore, getStoredDevices } from "@/lib/scanner";
-
-export const runtime = "nodejs";
+import { getAccessSession } from "@/lib/paywall";
+import { getDeviceVulnerabilityCounts, listDevices } from "@/lib/database";
 
 export async function GET() {
-  if (!(await hasPaidAccess())) {
-    return NextResponse.json({ error: "Upgrade required" }, { status: 402 });
+  const session = await getAccessSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const devices = await getStoredDevices();
+  const [devices, vulnerabilityCounts] = await Promise.all([listDevices(), getDeviceVulnerabilityCounts()]);
+
   return NextResponse.json({
-    devices,
-    total: devices.length,
-    score: calculateNetworkSecurityScore(devices)
+    devices: devices.map((device) => ({
+      ...device,
+      vulnerabilityCount: vulnerabilityCounts[device.id] ?? 0,
+    })),
   });
 }

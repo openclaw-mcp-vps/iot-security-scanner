@@ -1,40 +1,22 @@
-import Link from "next/link";
-import { NetworkScanner } from "@/components/NetworkScanner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { requirePaidAccess } from "@/lib/auth";
-import { getLatestScan } from "@/lib/scanner";
+import { TopNav } from "@/components/TopNav";
+import { ScanRunner } from "@/components/ScanRunner";
+import { requirePaidAccess } from "@/lib/paywall";
 
 export default async function ScanPage() {
   await requirePaidAccess();
-  const latest = await getLatestScan();
 
   return (
-    <div className="space-y-6 pb-8">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold">Network Scan</h1>
-          <p className="text-sm text-[#9aa4af]">Run active discovery and refresh your vulnerability profile.</p>
-        </div>
-        <Link className="rounded-md border border-[#30363d] px-4 py-2 text-sm hover:bg-[#161b22]" href="/dashboard">
-          Back to Dashboard
-        </Link>
-      </header>
-
-      <NetworkScanner />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Scanner Notes</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-[#9aa4af]">
-          <p>- Discovery first inspects ARP/neighbor tables, then probes common IoT service ports.</p>
-          <p>- Results are stored locally in JSON files under `data/` for historical tracking.</p>
-          <p>
-            - Most recent scan:{" "}
-            {latest ? `${new Date(latest.completedAt).toLocaleString()} (${latest.deviceCount} devices)` : "not available yet."}
+    <>
+      <TopNav showAppLinks showLogout />
+      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-6">
+          <h1 className="text-3xl font-semibold text-slate-100">Run Active Scan</h1>
+          <p className="mt-2 text-sm text-slate-400">
+            Trigger an immediate network assessment and correlate discovered services with known IoT vulnerabilities.
           </p>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+        <ScanRunner />
+      </main>
+    </>
   );
 }
